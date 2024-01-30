@@ -1,23 +1,15 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 // project settings: Linked => Input => Additional Dependencies => detours.lib
-#include "pch.h"
+#include <Windows.h>
+
 #include "detours.h"
 #include "detver.h"
 #include "syelog.h"
-
-
 
 // Address of the real WriteFile API
 typedef BOOL(WINAPI* True_WriteFile)(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED);
 
 True_WriteFile true_Writefile = NULL;
-
-/*
-BOOL WINAPI HookedWriteFile(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped)
-{
-    return True_WriteFile(hFile, lpBuffer, nNumberOfBytesToWrite, lpNumberOfBytesWritten, lpOverlapped);
-}
-*/
 
 // Our intercept function
 BOOL WINAPI HookedWriteFile(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite, LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped)
@@ -25,7 +17,6 @@ BOOL WINAPI HookedWriteFile(HANDLE hFile, LPCVOID lpBuffer, DWORD nNumberOfBytes
     const char* pBuf = "Your original text was replaced by the hooked function!";
     return true_Writefile(hFile, pBuf, 55, lpNumberOfBytesWritten, lpOverlapped);
 }
-
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
