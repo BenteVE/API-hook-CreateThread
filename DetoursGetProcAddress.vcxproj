@@ -156,8 +156,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="detours.h" />
-    <ClInclude Include="detver.h" />
-    <ClInclude Include="syelog.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
