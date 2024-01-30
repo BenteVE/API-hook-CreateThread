@@ -1,10 +1,6 @@
-// dllmain.cpp : Defines the entry point for the DLL application.
-// project settings: Linked => Input => Additional Dependencies => detours.lib
 #include <Windows.h>
 
 #include "detours.h"
-#include "detver.h"
-#include "syelog.h"
 
 // Address of the real WriteFile API
 typedef BOOL(WINAPI* True_WriteFile)(HANDLE, LPCVOID, DWORD, LPDWORD, LPOVERLAPPED);
