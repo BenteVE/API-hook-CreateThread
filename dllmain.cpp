@@ -5,24 +5,29 @@
 
 Console console;
 
-typedef struct _INITIAL_TEB {
-	PVOID                StackBase;
-	PVOID                StackLimit;
-	PVOID                StackCommit;
-	PVOID                StackCommitMax;
-	PVOID                StackReserved;
-} INITIAL_TEB, * PINITIAL_TEB;
-
 typedef struct _UNICODE_STRING {
 	USHORT Length;
 	USHORT MaximumLength;
 	PWSTR  Buffer;
 } UNICODE_STRING, * PUNICODE_STRING;
 
-typedef struct _CLIENT_ID {
-	HANDLE UniqueProcess;
-	HANDLE UniqueThread;
-} CLIENT_ID, * PCLIENT_ID;
+typedef struct _PS_ATTRIBUTE
+{
+	ULONG_PTR Attribute;
+	SIZE_T Size;
+	union
+	{
+		ULONG_PTR Value;
+		PVOID ValuePtr;
+	};
+	PSIZE_T ReturnLength;
+} PS_ATTRIBUTE, * PPS_ATTRIBUTE;
+
+typedef struct _PS_ATTRIBUTE_LIST
+{
+	SIZE_T TotalLength;
+	PS_ATTRIBUTE Attributes[1];
+} PS_ATTRIBUTE_LIST, * PPS_ATTRIBUTE_LIST;
 
 typedef struct _OBJECT_ATTRIBUTES {
 	ULONG           Length;
@@ -33,31 +38,42 @@ typedef struct _OBJECT_ATTRIBUTES {
 	PVOID           SecurityQualityOfService;
 } OBJECT_ATTRIBUTES, * POBJECT_ATTRIBUTES;
 
-/* signature of NtCreateThread
-NTSYSAPI
+typedef NTSTATUS(NTAPI* PUSER_THREAD_START_ROUTINE)(
+	_In_ PVOID ThreadParameter
+);
+
+
+/* signature of NtCreateThreadEx (NtCreateThread is a legacy function and is not used anymore)
+NTSYSCALLAPI
 NTSTATUS
 NTAPI
-NtCreateThread(
-	OUT PHANDLE ThreadHandle,
-	IN ACCESS_MASK DesiredAccess,
-	IN POBJECT_ATTRIBUTES ObjectAttributes OPTIONAL,
-	IN HANDLE ProcessHandle,
-	OUT PCLIENT_ID ClientId,
-	IN PCONTEXT ThreadContext,
-	IN PINITIAL_TEB InitialTeb,
-	IN BOOLEAN CreateSuspended);
+NtCreateThreadEx(
+	_Out_ PHANDLE ThreadHandle,
+	_In_ ACCESS_MASK DesiredAccess,
+	_In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
+	_In_ HANDLE ProcessHandle,
+	_In_ PUSER_THREAD_START_ROUTINE StartRoutine,
+	_In_opt_ PVOID Argument,
+	_In_ ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
+	_In_ SIZE_T ZeroBits,
+	_In_ SIZE_T StackSize,
+	_In_ SIZE_T MaximumStackSize,
+	_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
+	);
+
 */
 
-// Signature of the real NtCreateThread API
-typedef NTSYSAPI NTSTATUS (NTAPI* True_NtCreateThread)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, HANDLE, PCLIENT_ID, PCONTEXT, PINITIAL_TEB, BOOLEAN);
 
-True_NtCreateThread true_NtCreateThread = NULL;
+// Signature of the real NtCreateThread API
+typedef NTSYSCALLAPI NTSTATUS(NTAPI* True_NtCreateThreadEx)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, HANDLE, PUSER_THREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PPS_ATTRIBUTE_LIST);
+
+True_NtCreateThreadEx true_NtCreateThreadEx = NULL;
 
 // Our intercept function
-NTSTATUS NTAPI HookedNtCreateThread(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PCLIENT_ID ClientId, PCONTEXT ThreadContext, PINITIAL_TEB InitialTeb, BOOLEAN CreateSuspended)
+NTSTATUS NTAPI HookedNtCreateThreadEx(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PUSER_THREAD_START_ROUTINE StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PPS_ATTRIBUTE_LIST AttributeList)
 {
 	//printf("Created thread with id %i\n", *lpThreadId);
-	NTSTATUS s = true_NtCreateThread(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, ClientId, ThreadContext, InitialTeb, CreateSuspended);
+	NTSTATUS s = true_NtCreateThreadEx(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
 	fprintf(console.stream, "Created Nt thread with handle: %p \n", *ThreadHandle);
 
 	return s;
@@ -66,7 +82,7 @@ NTSTATUS NTAPI HookedNtCreateThread(PHANDLE ThreadHandle, ACCESS_MASK DesiredAcc
 
 
 // Address of the real CreateThread API
-HANDLE (WINAPI* trueCreateThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, __drv_aliasesMem LPVOID, DWORD, LPDWORD) = CreateThread;
+HANDLE(WINAPI* trueCreateThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, __drv_aliasesMem LPVOID, DWORD, LPDWORD) = CreateThread;
 
 // Our intercept function
 HANDLE WINAPI HookedCreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId)
@@ -77,10 +93,6 @@ HANDLE WINAPI HookedCreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_
 
 	return h;
 }
-
-
-
-
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
@@ -100,15 +112,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 			return FALSE;
 		}
 
-		true_NtCreateThread = (True_NtCreateThread)GetProcAddress(h_ntdll, "NtCreateThread");
-		if (true_NtCreateThread == NULL) {
+		true_NtCreateThreadEx = (True_NtCreateThreadEx)GetProcAddress(h_ntdll, "NtCreateThreadEx");
+		if (true_NtCreateThreadEx == NULL) {
 			console.log("GetProcAddress failed, aborting detours\n");
 			return FALSE;
 		}
 
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(&(PVOID&)true_NtCreateThread, HookedNtCreateThread);
+		DetourAttach(&(PVOID&)true_NtCreateThreadEx, HookedNtCreateThreadEx);
 		DetourAttach(&(PVOID&)trueCreateThread, HookedCreateThread);
 
 		LONG lError = DetourTransactionCommit();
@@ -126,7 +138,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 	{
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourDetach(&(PVOID&)true_NtCreateThread, HookedNtCreateThread);
+		DetourDetach(&(PVOID&)true_NtCreateThreadEx, HookedNtCreateThreadEx);
 		DetourDetach(&(PVOID&)trueCreateThread, HookedCreateThread);
 
 		LONG lError = DetourTransactionCommit();
