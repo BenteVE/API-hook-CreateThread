@@ -333,5 +333,5 @@ ASALocalRun/
 # Local History for Visual Studio
 .localhistory/
 
-# Ignore all DLL files
-*.dll
+# Ignore output files
+DLL/
