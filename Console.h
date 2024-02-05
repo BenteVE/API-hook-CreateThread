@@ -12,5 +12,4 @@ public:
 	~Console();
 
 	BOOL open();
-	void log(const char*);
 };

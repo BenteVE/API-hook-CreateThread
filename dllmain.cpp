@@ -2,97 +2,58 @@
 
 #include "detours.h"
 #include "Console.h"
+#include "NtCreateThreadEx.hpp"
 
 Console console;
 
-typedef struct _UNICODE_STRING {
-	USHORT Length;
-	USHORT MaximumLength;
-	PWSTR  Buffer;
-} UNICODE_STRING, * PUNICODE_STRING;
+// Returns a pointer to a specific function inside a specific DLL
+FARPROC getAddress(LPCTSTR dllName, LPCSTR function) {
+	HMODULE h_mod = GetModuleHandle(dllName);
+	if (h_mod == 0) {
+		fwprintf(console.stream, TEXT("No handle found for %s\n"), dllName);
+		return NULL;
+	}
+	fwprintf(console.stream, TEXT("Found handle %p for dll %s\n"), h_mod, dllName);
 
-typedef struct _PS_ATTRIBUTE
+	FARPROC address = GetProcAddress(h_mod, function);
+	if (address == NULL) {
+		fprintf(console.stream, "No handle found for %s\n", function);
+		return NULL;
+	}
+	fprintf(console.stream, "Found address %p for %s\n", address, function);
+
+	return address;
+}
+
+
+
+NtCreateThreadEx ntCreateThreadEx = NULL;
+NTSTATUS NTAPI NtCreateThreadExHook(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PUSER_THREAD_START_ROUTINE StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PPS_ATTRIBUTE_LIST AttributeList)
 {
-	ULONG_PTR Attribute;
-	SIZE_T Size;
-	union
-	{
-		ULONG_PTR Value;
-		PVOID ValuePtr;
-	};
-	PSIZE_T ReturnLength;
-} PS_ATTRIBUTE, * PPS_ATTRIBUTE;
+	fprintf(console.stream, "NtCreateThreadEx hook triggered \n");
+	NTSTATUS status = ntCreateThreadEx(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
+	fprintf(console.stream, "NtCreateThreadEx created a thread with handle: %p \n", *ThreadHandle);
 
-typedef struct _PS_ATTRIBUTE_LIST
-{
-	SIZE_T TotalLength;
-	PS_ATTRIBUTE Attributes[1];
-} PS_ATTRIBUTE_LIST, * PPS_ATTRIBUTE_LIST;
-
-typedef struct _OBJECT_ATTRIBUTES {
-	ULONG           Length;
-	HANDLE          RootDirectory;
-	PUNICODE_STRING ObjectName;
-	ULONG           Attributes;
-	PVOID           SecurityDescriptor;
-	PVOID           SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, * POBJECT_ATTRIBUTES;
-
-typedef NTSTATUS(NTAPI* PUSER_THREAD_START_ROUTINE)(
-	_In_ PVOID ThreadParameter
-);
-
-
-/* signature of NtCreateThreadEx (NtCreateThread is a legacy function and is not used anymore)
-NTSYSCALLAPI
-NTSTATUS
-NTAPI
-NtCreateThreadEx(
-	_Out_ PHANDLE ThreadHandle,
-	_In_ ACCESS_MASK DesiredAccess,
-	_In_opt_ POBJECT_ATTRIBUTES ObjectAttributes,
-	_In_ HANDLE ProcessHandle,
-	_In_ PUSER_THREAD_START_ROUTINE StartRoutine,
-	_In_opt_ PVOID Argument,
-	_In_ ULONG CreateFlags, // THREAD_CREATE_FLAGS_*
-	_In_ SIZE_T ZeroBits,
-	_In_ SIZE_T StackSize,
-	_In_ SIZE_T MaximumStackSize,
-	_In_opt_ PPS_ATTRIBUTE_LIST AttributeList
-	);
-
-*/
-
-
-// Signature of the real NtCreateThread API
-typedef NTSYSCALLAPI NTSTATUS(NTAPI* True_NtCreateThreadEx)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, HANDLE, PUSER_THREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PPS_ATTRIBUTE_LIST);
-
-True_NtCreateThreadEx true_NtCreateThreadEx = NULL;
-
-// Our intercept function
-NTSTATUS NTAPI HookedNtCreateThreadEx(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PUSER_THREAD_START_ROUTINE StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PPS_ATTRIBUTE_LIST AttributeList)
-{
-	//printf("Created thread with id %i\n", *lpThreadId);
-	NTSTATUS s = true_NtCreateThreadEx(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
-	fprintf(console.stream, "Created Nt thread with handle: %p \n", *ThreadHandle);
-
-	return s;
+	return status;
 }
 
 
 
 // Address of the real CreateThread API
-HANDLE(WINAPI* trueCreateThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, __drv_aliasesMem LPVOID, DWORD, LPDWORD) = CreateThread;
+// we don't need to use GetProcAddress to find a pointer to the function because it is documented and included in processthreadsapi.h
+HANDLE(WINAPI* createThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, __drv_aliasesMem LPVOID, DWORD, LPDWORD) = CreateThread;
 
 // Our intercept function
-HANDLE WINAPI HookedCreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId)
+HANDLE WINAPI CreateThreadHook(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId)
 {
-	//printf("Created thread with id %i\n", *lpThreadId);
-	HANDLE h = trueCreateThread(lpThreadAttributes, dwStackSize, lpStartAddress, lpParameter, dwCreationFlags, lpThreadId);
-	fprintf(console.stream, "Created thread with handle: %p \n", h);
+	fprintf(console.stream, "CreateThread hook triggered \n");
+	HANDLE h_thread = createThread(lpThreadAttributes, dwStackSize, lpStartAddress, lpParameter, dwCreationFlags, lpThreadId);
+	fprintf(console.stream, "CreateThread created a thread with handle: %p \n", h_thread);
 
-	return h;
+	return h_thread;
 }
+
+
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
@@ -105,31 +66,24 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 			return FALSE;
 		}
 
-		HMODULE h_ntdll = GetModuleHandle(TEXT("ntdll.dll"));
-
-		if (h_ntdll == 0) {
-			console.log("No handle found for ntdll.dll\n");
-			return FALSE;
-		}
-
-		true_NtCreateThreadEx = (True_NtCreateThreadEx)GetProcAddress(h_ntdll, "NtCreateThreadEx");
-		if (true_NtCreateThreadEx == NULL) {
-			console.log("GetProcAddress failed, aborting detours\n");
+		// Get the address of the original function NtCreateThreadEx
+		ntCreateThreadEx = (NtCreateThreadEx) getAddress(TEXT("ntdll.dll"), "NtCreateThreadEx");
+		if (!ntCreateThreadEx) {
 			return FALSE;
 		}
 
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourAttach(&(PVOID&)true_NtCreateThreadEx, HookedNtCreateThreadEx);
-		DetourAttach(&(PVOID&)trueCreateThread, HookedCreateThread);
+		DetourAttach(&(PVOID&)ntCreateThreadEx, NtCreateThreadExHook);
+		DetourAttach(&(PVOID&)createThread, CreateThreadHook);
 
 		LONG lError = DetourTransactionCommit();
 		if (lError != NO_ERROR) {
-			console.log("Detours failed to attach the hook\n");
+			fprintf(console.stream, "Detours failed to attach the hook\n");
 			return FALSE;
 		}
 
-		console.log("Hook attach successful\n");
+		fprintf(console.stream, "Hook attach successful\n");
 	}
 	break;
 
@@ -138,12 +92,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReser
 	{
 		DetourTransactionBegin();
 		DetourUpdateThread(GetCurrentThread());
-		DetourDetach(&(PVOID&)true_NtCreateThreadEx, HookedNtCreateThreadEx);
-		DetourDetach(&(PVOID&)trueCreateThread, HookedCreateThread);
+		DetourDetach(&(PVOID&)ntCreateThreadEx, NtCreateThreadExHook);
+		DetourDetach(&(PVOID&)createThread, CreateThreadHook);
 
 		LONG lError = DetourTransactionCommit();
 		if (lError != NO_ERROR) {
-			console.log("Detours failed to detach the hook\n");
+			fprintf(console.stream, "Detours failed to detach the hook\n");
 			return FALSE;
 		}
 	}
