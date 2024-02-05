@@ -2,7 +2,7 @@
 
 #include "detours.h"
 #include "Console.h"
-#include "NtCreateThreadEx.hpp"
+#include "NtCreateThreadEx.h"
 
 // The console to show debugging info
 Console console;
@@ -46,7 +46,7 @@ HANDLE WINAPI CreateThreadHook(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T 
 
 
 // Signature of the real NtCreateThreadEx function
-// this function are some of its arguments are undocumented, but it is possible to find the signatures and structures online or through reverse engineering 
+// this function and some of its arguments are undocumented, but it is possible to find the signatures and structures online or through reverse engineering 
 typedef NTSYSCALLAPI NTSTATUS(NTAPI* NtCreateThreadEx)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, HANDLE, PUSER_THREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PPS_ATTRIBUTE_LIST);
 
 // We need to store the address of the original function so we can still use it inside our hook

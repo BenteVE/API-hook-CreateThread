@@ -157,7 +157,7 @@
   <ItemGroup>
     <ClInclude Include="Console.h" />
     <ClInclude Include="detours.h" />
-    <ClInclude Include="NtCreateThreadEx.hpp" />
+    <ClInclude Include="NtCreateThreadEx.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Console.cpp" />
