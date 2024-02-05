@@ -4,9 +4,10 @@
 #include "Console.h"
 #include "NtCreateThreadEx.hpp"
 
+// The console to show debugging info
 Console console;
 
-// Returns a pointer to a specific function inside a specific DLL
+// Uses GetModuleHandle and GetProcAddress to find a pointer to a specific function inside a specific DLL
 FARPROC getAddress(LPCTSTR dllName, LPCSTR function) {
 	HMODULE h_mod = GetModuleHandle(dllName);
 	if (h_mod == 0) {
@@ -26,22 +27,12 @@ FARPROC getAddress(LPCTSTR dllName, LPCSTR function) {
 }
 
 
+// Signature of the real CreateThread function, this function is documented in the Windows API 
+typedef HANDLE(WINAPI* TrueCreateThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, __drv_aliasesMem LPVOID, DWORD, LPDWORD);
 
-NtCreateThreadEx ntCreateThreadEx = NULL;
-NTSTATUS NTAPI NtCreateThreadExHook(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PUSER_THREAD_START_ROUTINE StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PPS_ATTRIBUTE_LIST AttributeList)
-{
-	fprintf(console.stream, "NtCreateThreadEx hook triggered \n");
-	NTSTATUS status = ntCreateThreadEx(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
-	fprintf(console.stream, "NtCreateThreadEx created a thread with handle: %p \n", *ThreadHandle);
-
-	return status;
-}
-
-
-
-// Address of the real CreateThread API
-// we don't need to use GetProcAddress to find a pointer to the function because it is documented and included in processthreadsapi.h
-HANDLE(WINAPI* createThread)(LPSECURITY_ATTRIBUTES, SIZE_T, LPTHREAD_START_ROUTINE, __drv_aliasesMem LPVOID, DWORD, LPDWORD) = CreateThread;
+// We need to store the address of the original function so we can still use it inside our hook
+// The function is included in the Windows.h header (processthreadsapi.h), so we can just reference it without using GetProcAddress
+TrueCreateThread createThread = CreateThread;
 
 // Our intercept function
 HANDLE WINAPI CreateThreadHook(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T dwStackSize, LPTHREAD_START_ROUTINE lpStartAddress, __drv_aliasesMem LPVOID lpParameter, DWORD dwCreationFlags, LPDWORD lpThreadId)
@@ -54,6 +45,22 @@ HANDLE WINAPI CreateThreadHook(LPSECURITY_ATTRIBUTES lpThreadAttributes, SIZE_T 
 }
 
 
+// Signature of the real NtCreateThreadEx function
+// this function are some of its arguments are undocumented, but it is possible to find the signatures and structures online or through reverse engineering 
+typedef NTSYSCALLAPI NTSTATUS(NTAPI* NtCreateThreadEx)(PHANDLE, ACCESS_MASK, POBJECT_ATTRIBUTES, HANDLE, PUSER_THREAD_START_ROUTINE, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PPS_ATTRIBUTE_LIST);
+
+// We need to store the address of the original function so we can still use it inside our hook
+// The function is not included in the Windows.h header, so we need to find the address with GetProcAddress
+NtCreateThreadEx ntCreateThreadEx = NULL;
+
+NTSTATUS NTAPI NtCreateThreadExHook(PHANDLE ThreadHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, HANDLE ProcessHandle, PUSER_THREAD_START_ROUTINE StartRoutine, PVOID Argument, ULONG CreateFlags, SIZE_T ZeroBits, SIZE_T StackSize, SIZE_T MaximumStackSize, PPS_ATTRIBUTE_LIST AttributeList)
+{
+	fprintf(console.stream, "NtCreateThreadEx hook triggered \n");
+	NTSTATUS status = ntCreateThreadEx(ThreadHandle, DesiredAccess, ObjectAttributes, ProcessHandle, StartRoutine, Argument, CreateFlags, ZeroBits, StackSize, MaximumStackSize, AttributeList);
+	fprintf(console.stream, "NtCreateThreadEx created a thread with handle: %p \n", *ThreadHandle);
+
+	return status;
+}
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
