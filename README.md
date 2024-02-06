@@ -1,13 +1,19 @@
 # API Hooking with Microsoft Detours
 
 API hooking is a technique used for intercepting and modifying the behavior of functions at runtime.
+This can be used for debugging, ... .
 This repository provides two examples of API hooking functions of the Windows API using [Microsoft Detours](https://github.com/microsoft/Detours).
 
-## Explanation
+## Mechanism
+
+![API hook schematic](placeholder_API_hook_schematic.png)
+
+## Example
 
 The first example demonstrates hooking the well-documented `CreateThread` function in `kernel32.dll`.
 The second example showcases hooking the less-documented `NtCreateThreadEx` function in `ntdll.dll`. 
 Although this function is not officially documented, the necessary function signature can be found online.
+To find the address of this function, we use `GetProcAddress()`.
 
 To create the hooks, we first need to create a DLL file.
 This DLL will contain our hook functions, and a way to install the API hooks.
