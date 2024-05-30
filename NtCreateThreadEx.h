@@ -20,11 +20,12 @@ NTSYSCALLAPI NTSTATUS NTAPI NtCreateThreadEx(
 */
 
 // (Undocumented) Data structures that the function uses
-typedef struct _UNICODE_STRING {
+typedef struct _UNICODE_STRING
+{
 	USHORT Length;
 	USHORT MaximumLength;
-	PWSTR  Buffer;
-} UNICODE_STRING, * PUNICODE_STRING;
+	PWSTR Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 typedef struct _PS_ATTRIBUTE
 {
@@ -36,21 +37,22 @@ typedef struct _PS_ATTRIBUTE
 		PVOID ValuePtr;
 	};
 	PSIZE_T ReturnLength;
-} PS_ATTRIBUTE, * PPS_ATTRIBUTE;
+} PS_ATTRIBUTE, *PPS_ATTRIBUTE;
 
 typedef struct _PS_ATTRIBUTE_LIST
 {
 	SIZE_T TotalLength;
 	PS_ATTRIBUTE Attributes[1];
-} PS_ATTRIBUTE_LIST, * PPS_ATTRIBUTE_LIST;
+} PS_ATTRIBUTE_LIST, *PPS_ATTRIBUTE_LIST;
 
-typedef struct _OBJECT_ATTRIBUTES {
-	ULONG           Length;
-	HANDLE          RootDirectory;
+typedef struct _OBJECT_ATTRIBUTES
+{
+	ULONG Length;
+	HANDLE RootDirectory;
 	PUNICODE_STRING ObjectName;
-	ULONG           Attributes;
-	PVOID           SecurityDescriptor;
-	PVOID           SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, * POBJECT_ATTRIBUTES;
+	ULONG Attributes;
+	PVOID SecurityDescriptor;
+	PVOID SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
 
-typedef NTSTATUS(NTAPI* PUSER_THREAD_START_ROUTINE)(_In_ PVOID ThreadParameter);
+typedef NTSTATUS(NTAPI *PUSER_THREAD_START_ROUTINE)(_In_ PVOID ThreadParameter);
