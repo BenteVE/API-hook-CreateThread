@@ -11,7 +11,7 @@ This repository provides two examples of API hooking functions of the Windows AP
 ## Example
 
 The first example demonstrates hooking the well-documented `CreateThread` function in `kernel32.dll`.
-The second example showcases hooking the less-documented `NtCreateThreadEx` function in `ntdll.dll`. 
+The second example showcases hooking the less-documented `NtCreateThreadEx` function in `ntdll.dll`.
 Although this function is not officially documented, the necessary function signature can be found online.
 To find the address of this function, we use `GetProcAddress()`.
 
@@ -21,7 +21,7 @@ When the DLL is installed, it will open a console window that will show whenever
 
 For this, we also need a [DLL injector](https://github.com/BenteVE/DLL-Injector).
 When the DLL is injected, we use Microsoft Detours to install the hooks.
-Whenever the target program then wants to use the original function, our hook function in the injected DLL will be called instead. 
+Whenever the target program then wants to use the original function, our hook function in the injected DLL will be called instead.
 
 ## Demo
 
@@ -38,8 +38,4 @@ Whenever the target program then wants to use the original function, our hook fu
 
 4. By examining both examples, it becomes apparent that the `CreateThread` function internally uses the `NtCreateThreadEx` function.
 
-![Demo Example](placeholder_video.gif)
-
-## Disclaimer
-
-These examples are meant for educational and research purposes.
+![Demo Example](doc/demo.gif)
